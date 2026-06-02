@@ -1,0 +1,18 @@
+[
+  {
+    "version": "2.14.1",
+    "is_latest_version": false,
+    "is_recommended_version": false,
+    "leak_level_count": {"leak_serious": 1},
+    "link": "https://logging.apache.org/log4j/2.x/",
+    "release_date": "2021-03-06"
+  },
+  {
+    "version": "2.17.0",
+    "is_latest_version": false,
+    "is_recommended_version": true,
+    "leak_level_count": {"safe": 1},
+    "link": "https://logging.apache.org/log4j/2.x/",
+    "release_date": "2021-12-17"
+  }
+]

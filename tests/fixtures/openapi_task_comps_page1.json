@@ -1,0 +1,25 @@
+{
+  "page": 1,
+  "per_page": 1,
+  "total": 2,
+  "has_next": true,
+  "next_num": 2,
+  "items": [
+    {
+      "id": 100,
+      "name": "log4j-core",
+      "version": "2.14.1",
+      "language": 1,
+      "gav_coordinate": "org.apache.logging.log4j:log4j-core:2.14.1",
+      "level": "critical",
+      "risk_types": ["存在漏洞"],
+      "leak_num": 1,
+      "dep_info": [{"name": "直接引用", "value": 0, "count": 1}],
+      "dep_type": [0],
+      "comp_refer": {"current_refer_path": ["pom.xml"], "root_refer_path": []},
+      "use_status": "使用",
+      "licenses": [{"license": "Apache-2.0", "spdx_id": "Apache-2.0"}],
+      "search_url": "https://example.com"
+    }
+  ]
+}

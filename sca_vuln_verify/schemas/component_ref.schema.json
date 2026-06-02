@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "component_ref.schema.json",
+  "title": "ComponentRef",
+  "type": "object",
+  "required": ["name", "version"],
+  "properties": {
+    "sca_comp_id": {"type": "integer"},
+    "task_id": {"type": "integer"},
+    "project_id": {"type": "integer"},
+    "name": {"type": "string", "minLength": 1},
+    "version": {"type": "string", "minLength": 1},
+    "language": {"type": "string"},
+    "language_enum": {"type": "integer"},
+    "gav_coordinate": {"type": "string"},
+    "purl": {"type": "string"},
+    "ecosystem": {"type": "string"},
+    "namespace": {"type": ["string", "null"]}
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,18 @@
+{
+  "page": 1,
+  "per_page": 2,
+  "total": 2,
+  "has_next": false,
+  "items": [
+    {
+      "path": "pom.xml",
+      "is_dir": 0,
+      "component_ids": [100]
+    },
+    {
+      "path": "src/main/java/App.java",
+      "is_dir": 0,
+      "component_ids": [200]
+    }
+  ]
+}

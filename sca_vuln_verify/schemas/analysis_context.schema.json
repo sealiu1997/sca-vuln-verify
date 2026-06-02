@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "analysis_context.schema.json",
+  "title": "AnalysisContext",
+  "type": "object",
+  "required": ["task", "fetched_data", "key_findings", "next_steps"],
+  "properties": {
+    "task": {"type": "object"},
+    "fetched_data": {"type": "object"},
+    "key_findings": {"type": "array", "items": {"type": "string"}},
+    "current_conclusion": {"type": ["string", "null"]},
+    "next_steps": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": true
+}

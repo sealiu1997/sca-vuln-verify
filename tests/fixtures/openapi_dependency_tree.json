@@ -1,0 +1,24 @@
+{
+  "id": 0,
+  "uuid": 0,
+  "name": "root",
+  "version": "",
+  "language": 1,
+  "path": "pom.xml",
+  "type": 1,
+  "children": [
+    {
+      "id": 100,
+      "uuid": 1000,
+      "name": "log4j-core",
+      "version": "2.14.1",
+      "language": 1,
+      "path": "pom.xml",
+      "type": 2,
+      "com_level": 4,
+      "leak_serious": 1,
+      "licenses": ["Apache-2.0"],
+      "children": []
+    }
+  ]
+}

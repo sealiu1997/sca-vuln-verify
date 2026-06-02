@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sca-vuln-verify"
+version = "0.1.0"
+description = "Atomic SCA vulnerability verification helpers backed by SCA OpenAPI."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "httpx>=0.27",
+  "jsonschema>=4.0",
+  "packageurl-python>=0.15",
+  "packaging>=24.0",
+  "referencing>=0.35",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-httpx>=0.30",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["sca_vuln_verify*"]
+
+[tool.setuptools.package-data]
+sca_vuln_verify = ["schemas/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

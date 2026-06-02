@@ -1,0 +1,59 @@
+{
+  "cve_id": "CVE-2021-44228",
+  "moresec_id": "MS-2021-0001",
+  "cnvd": "CNVD-2021-95914",
+  "cnnvd": "CNNVD-202112-799",
+  "osv_ids": "GHSA-jfh8-c2jp-5v3q",
+  "name": "Apache Log4j remote code execution",
+  "summary": "JNDI lookup can lead to remote code execution.",
+  "level": "critical",
+  "leak_level": 4,
+  "cvss_three": 10.0,
+  "cvss_three_base": {
+    "AV": "N",
+    "AC": "L",
+    "PR": "N",
+    "UI": "N",
+    "S": "C",
+    "C": "H",
+    "I": "H",
+    "A": "H"
+  },
+  "cvss_three_severity": "critical",
+  "cvss_three_difficulty": "low",
+  "cvss_two": 9.3,
+  "cwe": "CWE-20",
+  "poc_enable": 1,
+  "poc_grade": "serious",
+  "real_vuln_type": 1,
+  "solution": "Upgrade to 2.17.0 or later.",
+  "suggestion": "Remove JndiLookup if upgrade is not possible.",
+  "references": ["https://logging.apache.org/log4j/2.x/security.html"],
+  "firm": "Apache",
+  "last_modified_time": "2026-01-01",
+  "comps": [
+    {
+      "name": "log4j-core",
+      "language": "Java",
+      "language_enum": 1,
+      "start_version": "2.0-beta9",
+      "start_open": false,
+      "end_version": "2.15.0",
+      "end_open": true,
+      "git_url": "https://example.com"
+    }
+  ],
+  "path": [
+    {
+      "className": "org.apache.logging.log4j.core.lookup.JndiLookup",
+      "methodFullName": "lookup(java.lang.String)",
+      "packageName": "org.apache.logging.log4j.core.lookup",
+      "filename": "JndiLookup.java",
+      "lineNumber": 42,
+      "symbol": "lookup",
+      "node": {
+        "sourceCode": "large source code block"
+      }
+    }
+  ]
+}

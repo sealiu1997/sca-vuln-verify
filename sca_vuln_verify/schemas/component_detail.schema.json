@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "component_detail.schema.json",
+  "title": "ComponentDetail",
+  "type": "object",
+  "required": ["ref"],
+  "properties": {
+    "ref": {"$ref": "component_ref.schema.json"},
+    "level": {"type": ["string", "null"]},
+    "risk_types": {"type": "array"},
+    "leak_num": {"type": ["integer", "null"]},
+    "leak_level_count": {"type": ["object", "null"]},
+    "dep_info": {"type": "array"},
+    "dep_type": {"type": "array"},
+    "comp_refer": {"type": ["object", "null"]},
+    "indirect_comp": {"type": "array"},
+    "use_status": {"type": ["string", "null"]},
+    "latest_version": {"type": ["string", "null"]},
+    "recommended_upgrade_version": {"type": ["object", "string", "null"]},
+    "latest_release_version": {"type": ["object", "string", "null"]},
+    "leaks": {"type": "array"},
+    "licenses": {"type": "array"},
+    "source_api": {"type": ["string", "null"]},
+    "request_id": {"type": ["string", "null"]},
+    "fetched_at": {"type": ["string", "null"]}
+  },
+  "additionalProperties": true
+}

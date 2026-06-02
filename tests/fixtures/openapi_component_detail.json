@@ -1,0 +1,60 @@
+{
+  "id": 100,
+  "name": "log4j-core",
+  "version": "2.14.1",
+  "language": "Java",
+  "language_enum": 1,
+  "gav_coordinate": "org.apache.logging.log4j:log4j-core:2.14.1",
+  "level": "critical",
+  "risk_types": ["存在漏洞", "非最新版"],
+  "leak_num": 1,
+  "leak_level_count": {
+    "leak_serious": 1
+  },
+  "dep_info": [
+    {
+      "count": 1,
+      "name": "直接引用",
+      "value": 0
+    }
+  ],
+  "dep_type": [0],
+  "comp_refer": {
+    "current_refer_path": ["pom.xml"],
+    "root_refer_path": []
+  },
+  "indirect_comp": [],
+  "use_status": "使用",
+  "latest_version": "2.23.1",
+  "recommended_upgrade_version": {
+    "version": "2.17.0",
+    "reason": "safe version"
+  },
+  "latest_release_version": {
+    "version": "2.23.1"
+  },
+  "leaks": [
+    {
+      "cve_id": "CVE-2021-44228",
+      "moresec_id": "MS-2021-0001",
+      "name": "Apache Log4j remote code execution",
+      "level": "critical",
+      "cvss_three": 10.0,
+      "poc_enable": 1,
+      "solution": "Upgrade",
+      "summary": "RCE",
+      "firm": "Apache"
+    }
+  ],
+  "licenses": [
+    {
+      "license": "Apache-2.0",
+      "spdx_id": "Apache-2.0",
+      "license_level": "safe",
+      "license_problem": 0,
+      "problem_text": "long text"
+    }
+  ],
+  "jira_status": 1,
+  "projects": [{"id": 1}]
+}

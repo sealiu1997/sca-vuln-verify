@@ -1,0 +1,21 @@
+{
+  "page": 2,
+  "per_page": 1,
+  "total": 2,
+  "has_next": false,
+  "items": [
+    {
+      "id": 101,
+      "name": "commons-io",
+      "version": "2.6",
+      "language": 1,
+      "gav_coordinate": "commons-io:commons-io:2.6",
+      "level": "medium",
+      "risk_types": ["非最新版"],
+      "leak_num": 0,
+      "dep_info": [{"name": "间接引用", "value": 1, "count": 1}],
+      "dep_type": [1],
+      "licenses": [{"license": "Apache-2.0"}]
+    }
+  ]
+}

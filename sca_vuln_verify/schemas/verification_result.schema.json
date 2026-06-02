@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "verification_result.schema.json",
+  "title": "VerificationResult",
+  "type": "object",
+  "required": [
+    "analysis_id",
+    "timestamp",
+    "component",
+    "vulnerability",
+    "verdict",
+    "evidence",
+    "risk_factors",
+    "recommended_actions"
+  ],
+  "properties": {
+    "analysis_id": {"type": "string", "minLength": 1},
+    "timestamp": {"type": "string", "minLength": 1},
+    "component": {"$ref": "component_ref.schema.json"},
+    "vulnerability": {"$ref": "vulnerability_info.schema.json"},
+    "project_context": {"type": ["object", "null"]},
+    "verdict": {
+      "type": "object",
+      "required": ["status", "confidence"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "exploitable",
+            "likely_exploitable",
+            "inconclusive",
+            "likely_not_exploitable",
+            "not_exploitable"
+          ]
+        },
+        "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+        "reasoning": {"type": ["string", "null"]}
+      },
+      "additionalProperties": true
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "description", "source_module", "confidence"],
+        "properties": {
+          "type": {"type": "string"},
+          "description": {"type": "string"},
+          "source_module": {"type": "string"},
+          "source_api": {"type": ["string", "null"]},
+          "request_id": {"type": ["string", "null"]},
+          "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+          "fetched_at": {"type": ["string", "null"]},
+          "location": {"type": ["string", "null"]},
+          "raw_ref": {}
+        },
+        "additionalProperties": true
+      }
+    },
+    "risk_factors": {"type": "object"},
+    "recommended_actions": {"type": "array"},
+    "requires_human_review": {"type": "boolean"},
+    "review_reason": {"type": ["string", "null"]}
+  },
+  "additionalProperties": true
+}
