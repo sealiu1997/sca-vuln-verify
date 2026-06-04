@@ -27,6 +27,7 @@ from sca_vuln_verify.modules.verdict import suggest_verdict
 
 
 IntelProvider = Callable[[str], dict[str, Any]]
+ProgressCallback = Callable[[dict[str, Any]], None]
 
 SEVERITY_WEIGHT = {
     "critical": 5,
@@ -52,6 +53,11 @@ def _as_list(value: Any) -> list[Any]:
     if isinstance(value, list):
         return value
     return [value]
+
+
+def _emit_progress(progress_callback: ProgressCallback | None, event: dict[str, Any]) -> None:
+    if progress_callback is not None:
+        progress_callback(event)
 
 
 def _error_metadata(operation: str, endpoint: str | None, exc: Exception) -> dict[str, Any]:
@@ -499,20 +505,25 @@ def verify_task(
     timestamp: str | None = None,
     intel_provider: IntelProvider | None = None,
     max_external_workers: int = 4,
+    progress_callback: ProgressCallback | None = None,
 ) -> dict[str, Any]:
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     stamp = timestamp or _utc_timestamp()
     fetch_meta: dict[str, Any] = {"task_id": task_id, "errors": []}
+    _emit_progress(progress_callback, {"event": "task_started", "task_id": task_id})
 
     try:
         scan_result = fetch_project_scan_result(client, task_id, page_size=page_size, allow_partial=True)
         fetch_meta["scan"] = scan_result.get("fetch_meta", {})
+        _emit_progress(progress_callback, {"event": "scan_fetched", "task_id": task_id})
     except SCAVulnVerifyError as exc:
         error = _error_metadata("fetch_project_scan_result", f"GET /openapi/v1/tasks/{task_id}", exc)
         fetch_meta["errors"].append(error)
         results = [_failure_result(task_id, error)]
-        return _write_task_outputs(output_path, task_id, stamp, results, fetch_meta)
+        output = _write_task_outputs(output_path, task_id, stamp, results, fetch_meta)
+        _emit_progress(progress_callback, {"event": "task_failed", "task_id": task_id, "error": error})
+        return output
 
     try:
         dependency_tree = fetch_project_dependency_tree(client, task_id)
@@ -521,6 +532,7 @@ def verify_task(
             "request_id": dependency_tree.get("request_id"),
         }
         tree_data = dependency_tree.get("tree")
+        _emit_progress(progress_callback, {"event": "dependency_tree_fetched", "task_id": task_id})
     except SCAVulnVerifyError as exc:
         error = _error_metadata("fetch_project_dependency_tree", f"GET /openapi/v1/tasks/{task_id}/comp-trees", exc)
         fetch_meta["errors"].append(error)
@@ -546,8 +558,18 @@ def verify_task(
         candidates = candidates[:top_n]
 
     scan_partial = bool(scan_result.get("fetch_meta", {}).get("partial"))
-    results = [
-        _verify_candidate(
+    results = []
+    total_candidates = len(candidates)
+    _emit_progress(
+        progress_callback,
+        {
+            "event": "candidates_selected",
+            "task_id": task_id,
+            "candidate_count": total_candidates,
+        },
+    )
+    for index, candidate in enumerate(candidates, start=1):
+        result = _verify_candidate(
             client,
             candidate,
             task_id=task_id,
@@ -555,11 +577,24 @@ def verify_task(
             dependency_tree=tree_data,
             scan_partial=scan_partial,
         )
-        for candidate in candidates
-    ]
+        results.append(result)
+        _emit_progress(
+            progress_callback,
+            {
+                "event": "candidate_verified",
+                "task_id": task_id,
+                "index": index,
+                "total": total_candidates,
+                "component": result.get("component"),
+                "vulnerability_id": result.get("vulnerability", {}).get("vuln_id"),
+                "verdict": result.get("verdict", {}).get("status"),
+            },
+        )
     fetch_meta["result_count"] = len(results)
     fetch_meta["candidate_count"] = len(candidates)
-    return _write_task_outputs(output_path, task_id, stamp, results, fetch_meta)
+    output = _write_task_outputs(output_path, task_id, stamp, results, fetch_meta)
+    _emit_progress(progress_callback, {"event": "task_completed", "task_id": task_id, "result_count": len(results)})
+    return output
 
 
 def _write_task_outputs(
@@ -591,7 +626,9 @@ def verify_batch(
     client: Any,
     *,
     task_id: int | None = None,
+    task_ids: list[int] | tuple[int, ...] | None = None,
     project_id: int | str | None = None,
+    task_scan_range: tuple[int, int] | None = None,
     output_dir: str | Path = "sca-vuln-verify-output",
     top_n: int | None = None,
     severities: set[str] | list[str] | None = None,
@@ -599,16 +636,32 @@ def verify_batch(
     timestamp: str | None = None,
     intel_provider: IntelProvider | None = None,
     max_external_workers: int = 4,
+    progress_callback: ProgressCallback | None = None,
 ) -> dict[str, Any]:
-    if task_id is None and project_id is None:
-        raise ValueError("task_id or project_id is required")
-    if task_id is not None and project_id is not None:
-        raise ValueError("provide either task_id or project_id, not both")
+    provided_inputs = sum(item is not None for item in (task_id, task_ids, project_id))
+    if provided_inputs == 0:
+        raise ValueError("task_id, task_ids, or project_id is required")
+    if provided_inputs > 1:
+        raise ValueError("provide only one of task_id, task_ids, or project_id")
+    if task_scan_range is not None and project_id is None:
+        raise ValueError("task_scan_range requires project_id")
 
     if task_id is not None:
-        task_ids = [task_id]
+        resolved_task_ids = [int(task_id)]
+    elif task_ids is not None:
+        resolved_task_ids = [int(item) for item in task_ids]
+        if not resolved_task_ids:
+            raise ValueError("task_ids cannot be empty")
     else:
-        task_ids = [int(task["id"]) for task in discover_project_tasks(client, project_id, page_size=page_size)]
+        resolved_task_ids = [
+            int(task["id"])
+            for task in discover_project_tasks(
+                client,
+                project_id,
+                page_size=page_size,
+                task_scan_range=task_scan_range,
+            )
+        ]
 
     tasks = [
         verify_task(
@@ -621,7 +674,8 @@ def verify_batch(
             timestamp=timestamp,
             intel_provider=intel_provider,
             max_external_workers=max_external_workers,
+            progress_callback=progress_callback,
         )
-        for task in task_ids
+        for task in resolved_task_ids
     ]
     return {"tasks": tasks, "output_dir": str(output_dir)}

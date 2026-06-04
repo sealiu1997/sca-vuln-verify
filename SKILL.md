@@ -23,7 +23,7 @@ This package provides a function library, not a forced workflow engine. P0-P2 us
 - `fetch_vuln_affected_components(client, vuln_id)`
 - `fetch_component_code_location(client, task_id, component_ref, vuln_id=None)`
 - `fetch_vuln_fix_info(client, vuln_id, component_ref=None)`
-- `discover_project_tasks(client, project_id, page_size=100)`
+- `discover_project_tasks(client, project_id, page_size=100, task_scan_range=None)`
 
 `sca_vuln_verify.modules.data_process`
 
@@ -51,14 +51,30 @@ This package provides a function library, not a forced workflow engine. P0-P2 us
 
 `sca_vuln_verify.workflows.batch`
 
-- `verify_batch(client, task_id=None, project_id=None, ...)`
-- `verify_task(client, task_id, ...)`
+- `verify_batch(client, task_id=None, task_ids=None, project_id=None, task_scan_range=None, ...)`
+- `verify_task(client, task_id, progress_callback=None, ...)`
+
+## OpenAPI Client Configuration
+
+Required environment variables:
+
+- `SCA_OPENAPI_BASE_URL`
+- `SCA_OPENAPI_ACCESS_KEY`
+- `SCA_OPENAPI_SECRET_KEY`
+
+Optional environment variables:
+
+- `SCA_OPENAPI_TIMEOUT_SECONDS`
+- `SCA_OPENAPI_MAX_RETRIES`
+- `SCA_OPENAPI_SSL_VERIFY`: `true` by default, `false`/`0`/`no`/`off` disables TLS certificate verification for trusted self-signed private deployments, and any other value is treated as a CA bundle path.
 
 ## Recommended Analysis Flow
 
 For a component vulnerability, fetch vulnerability detail, fetch component detail, compare the installed version to affected ranges, query EPSS/KEV, inspect dependency depth or code locations when available, ask `suggest_verdict` for a baseline, then assemble a `VerificationResult`.
 
 For a project scan, call `fetch_project_scan_result`, sort component-vulnerability pairs by severity, KEV, EPSS, PoC, and dependency signal, then run the component flow per candidate.
+
+If `discover_project_tasks` fails because module responses only include `task_names[]` and not stable task IDs, pass known `task_ids` to `verify_batch`. Use `task_scan_range` only as an explicit diagnostic fallback because it probes `GET /openapi/v1/tasks/{id}` across the supplied range.
 
 ## Baseline Verdict Rules
 
@@ -75,5 +91,6 @@ The baseline rules are suggestions only. An agent may override them, but should 
 ## Safety Notes
 
 - Never treat API failure as evidence that a vulnerability is not exploitable.
+- Do not disable TLS verification except for trusted self-signed private SCA servers.
 - Never fabricate patch commit IDs; P1 returns solution, suggestion, recommended upgrade version, and available versions only.
 - Preserve `source_api`, `request_id`, and `source_module` in evidence when available.

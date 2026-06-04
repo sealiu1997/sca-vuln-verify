@@ -100,6 +100,37 @@ def test_verify_batch_task_outputs_fixed_files(tmp_path):
     assert "Summary" in Path(task["files"]["summary"]).read_text(encoding="utf-8")
 
 
+def test_verify_batch_accepts_task_ids_list(tmp_path):
+    result = verify_batch(
+        make_client(),
+        task_ids=[1],
+        output_dir=tmp_path,
+        timestamp="20260602T010203Z",
+        intel_provider=fake_intel,
+    )
+
+    assert result["tasks"][0]["task_id"] == 1
+    assert Path(result["tasks"][0]["files"]["jsonl"]).exists()
+
+
+def test_verify_batch_emits_progress_events(tmp_path):
+    events = []
+
+    result = verify_batch(
+        make_client(),
+        task_id=1,
+        output_dir=tmp_path,
+        timestamp="20260602T010203Z",
+        intel_provider=fake_intel,
+        progress_callback=events.append,
+    )
+
+    assert result["tasks"][0]["task_id"] == 1
+    assert events[0] == {"event": "task_started", "task_id": 1}
+    assert any(event["event"] == "candidate_verified" for event in events)
+    assert events[-1] == {"event": "task_completed", "task_id": 1, "result_count": 1}
+
+
 def test_verify_batch_marks_api_failure_for_human_review(tmp_path):
     client = make_client()
     client.routes["/openapi/v1/knowledge-base/leaks"] = OpenAPIServerError(

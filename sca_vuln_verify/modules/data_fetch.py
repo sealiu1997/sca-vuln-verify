@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -10,11 +11,16 @@ from sca_vuln_verify.exceptions import (
     FetchError,
     NormalizationError,
     OpenAPIError,
+    OpenAPINotFoundError,
+    OpenAPIResponseError,
     PartialFetchError,
     SCAVulnVerifyError,
 )
 from sca_vuln_verify.utils.language import language_enum_to_ecosystem
 from sca_vuln_verify.utils.purl_sca_mapper import component_ref_from_sca_row
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _now_iso() -> str:
@@ -523,10 +529,14 @@ def fetch_project_dependency_tree(
     }
 
 
-def _normalize_version_item(raw: Any, *, request_id: str | None, source_api: str) -> dict[str, Any]:
+def _normalize_version_item(raw: Any, *, request_id: str | None, source_api: str) -> dict[str, Any] | None:
     if isinstance(raw, str):
+        if not raw.strip():
+            return None
         item = {"version": raw}
     elif isinstance(raw, dict):
+        if raw.get("version") in (None, ""):
+            return None
         item = {
             key: raw.get(key)
             for key in (
@@ -542,7 +552,7 @@ def _normalize_version_item(raw: Any, *, request_id: str | None, source_api: str
             if raw.get(key) is not None
         }
     else:
-        raise NormalizationError("fetch_component_versions", raw, "version entry must be a string or object")
+        return None
 
     item["source_api"] = source_api
     item["request_id"] = request_id
@@ -565,6 +575,7 @@ def _version_entries(data: Any) -> list[Any]:
             return [
                 {"version": version, **metadata}
                 for version in data["versions"]
+                if version not in (None, "")
             ]
         if data.get("version") is not None:
             return [data]
@@ -595,10 +606,39 @@ def fetch_component_versions(client: Any, component_ref: dict[str, Any]) -> list
         except OpenAPIError as exc:
             raise FetchError("fetch_component_versions", endpoint, exc.request_id, exc) from exc
 
-    return [
-        _normalize_version_item(item, request_id=response.request_id, source_api=endpoint)
-        for item in _version_entries(response.data)
-    ]
+    entries = _version_entries(response.data)
+    versions: list[dict[str, Any]] = []
+    skipped_count = 0
+    for item in entries:
+        normalized = _normalize_version_item(item, request_id=response.request_id, source_api=endpoint)
+        if normalized is None:
+            skipped_count += 1
+            continue
+        versions.append(normalized)
+
+    if skipped_count:
+        LOGGER.warning(
+            "Skipped %s invalid component version entries from %s (request_id=%s)",
+            skipped_count,
+            endpoint,
+            response.request_id,
+        )
+
+    if isinstance(response.data, dict) and response.data.get("total") is not None:
+        try:
+            total = int(response.data["total"])
+        except (TypeError, ValueError):
+            total = None
+        if total is not None and total != len(versions):
+            LOGGER.warning(
+                "Component version total mismatch from %s (request_id=%s): total=%s valid_versions=%s",
+                endpoint,
+                response.request_id,
+                total,
+                len(versions),
+            )
+
+    return versions
 
 
 def fetch_vuln_affected_components(client: Any, vuln_id: str) -> list[dict[str, Any]]:
@@ -786,6 +826,13 @@ def _is_int_like(value: Any) -> bool:
     return isinstance(value, int) or (isinstance(value, str) and value.isdigit())
 
 
+def _int_value(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _resolve_project_id(client: Any, project_id: int | str, page_size: int) -> int:
     if _is_int_like(project_id):
         return int(project_id)
@@ -813,12 +860,62 @@ def _resolve_project_id(client: Any, project_id: int | str, page_size: int) -> i
     )
 
 
-def discover_project_tasks(client: Any, project_id: int | str, page_size: int = 100) -> list[dict[str, Any]]:
+def _is_not_found_error(exc: OpenAPIError) -> bool:
+    if isinstance(exc, OpenAPINotFoundError):
+        return True
+    return isinstance(exc, OpenAPIResponseError) and "not found" in str(exc).lower()
+
+
+def _discover_project_tasks_by_scan(
+    client: Any,
+    project_id: int,
+    task_scan_range: tuple[int, int],
+) -> list[dict[str, Any]]:
+    start_id, end_id = task_scan_range
+    if start_id <= 0 or end_id <= 0 or end_id < start_id:
+        raise ValueError("task_scan_range must be a positive (start_id, end_id) tuple")
+
+    tasks: list[dict[str, Any]] = []
+    for task_id in range(start_id, end_id + 1):
+        endpoint = f"GET /openapi/v1/tasks/{task_id}"
+        try:
+            response = client.get(f"/openapi/v1/tasks/{task_id}")
+        except OpenAPIError as exc:
+            if _is_not_found_error(exc):
+                continue
+            raise FetchError("discover_project_tasks_by_scan", endpoint, exc.request_id, exc) from exc
+
+        raw_task = response.data if isinstance(response.data, dict) else {}
+        if _int_value(raw_task.get("project_id")) != project_id:
+            continue
+        tasks.append(
+            {
+                "id": task_id,
+                "name": raw_task.get("name"),
+                "status": raw_task.get("check_status_num") or raw_task.get("status"),
+                "module_id": raw_task.get("module_id"),
+                "module_name": raw_task.get("module_name"),
+                "project_id": project_id,
+                "project_name": raw_task.get("project_name"),
+                "source_api": endpoint,
+                "request_id": response.request_id,
+            }
+        )
+    return tasks
+
+
+def discover_project_tasks(
+    client: Any,
+    project_id: int | str,
+    page_size: int = 100,
+    task_scan_range: tuple[int, int] | None = None,
+) -> list[dict[str, Any]]:
     resolved_project_id = _resolve_project_id(client, project_id, page_size)
     endpoint = "GET /openapi/v1/modules"
     tasks: list[dict[str, Any]] = []
     saw_module = False
     saw_tasks_field = False
+    saw_task_names_field = False
 
     try:
         for response in client.iter_pages(
@@ -827,6 +924,8 @@ def discover_project_tasks(client: Any, project_id: int | str, page_size: int = 
         ):
             for module in _page_items(response):
                 saw_module = True
+                if "task_names" in module:
+                    saw_task_names_field = True
                 if "tasks" not in module:
                     continue
                 saw_tasks_field = True
@@ -857,11 +956,18 @@ def discover_project_tasks(client: Any, project_id: int | str, page_size: int = 
         raise FetchError("discover_project_tasks", endpoint, exc.request_id, exc) from exc
 
     if not tasks:
+        if task_scan_range is not None:
+            scanned_tasks = _discover_project_tasks_by_scan(client, resolved_project_id, task_scan_range)
+            if scanned_tasks:
+                return scanned_tasks
+
         reason = "module list response does not include usable tasks[] with task ids"
         if not saw_module:
             reason = "project has no modules in OpenAPI response"
         elif not saw_tasks_field:
             reason = "module list response lacks tasks[]; task_names[] is not a stable task id source"
+        if saw_task_names_field:
+            reason = f"{reason}; pass task_ids or enable explicit task id scan"
         raise FetchError("discover_project_tasks", endpoint, None, RuntimeError(reason))
 
     return tasks

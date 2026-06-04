@@ -20,11 +20,64 @@ from sca_vuln_verify.exceptions import (
 )
 
 
+_SSL_VERIFY_FALSE_VALUES = {"", "0", "false", "no", "off"}
+_SSL_VERIFY_TRUE_VALUES = {"1", "true", "yes", "on"}
+
+
 @dataclass(frozen=True)
 class OpenAPIResponse:
     data: Any
     request_id: str | None
     raw: dict[str, Any]
+
+
+def _resolve_ssl_verify(verify: bool | str | None) -> bool | str:
+    if verify is not None:
+        return verify
+
+    raw = os.getenv("SCA_OPENAPI_SSL_VERIFY")
+    if raw is None:
+        return True
+
+    value = raw.strip()
+    lowered = value.lower()
+    if lowered in _SSL_VERIFY_FALSE_VALUES:
+        return False
+    if lowered in _SSL_VERIFY_TRUE_VALUES:
+        return True
+    return value
+
+
+def _int_or_none(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _next_page_number(page_data: dict[str, Any], page_params: dict[str, Any]) -> int | None:
+    current_page = _int_or_none(page_data.get("page")) or _int_or_none(page_params.get("page")) or 1
+
+    if "has_next" in page_data:
+        if not bool(page_data.get("has_next")):
+            return None
+        return _int_or_none(page_data.get("next_num")) or current_page + 1
+
+    pages = _int_or_none(page_data.get("pages"))
+    if pages is not None:
+        return current_page + 1 if current_page < pages else None
+
+    total = _int_or_none(page_data.get("total"))
+    per_page = (
+        _int_or_none(page_data.get("per_page"))
+        or _int_or_none(page_data.get("num"))
+        or _int_or_none(page_params.get("num"))
+    )
+    if total is None or per_page is None or per_page <= 0:
+        return None
+    if current_page * per_page >= total:
+        return None
+    return current_page + 1
 
 
 class SCAOpenAPIClient:
@@ -38,6 +91,7 @@ class SCAOpenAPIClient:
         secret_key: str | None = None,
         timeout_seconds: float | None = None,
         max_retries: int | None = None,
+        verify: bool | str | None = None,
         client: httpx.Client | None = None,
     ) -> None:
         self.base_url = (base_url or os.getenv("SCA_OPENAPI_BASE_URL") or "").rstrip("/")
@@ -53,6 +107,7 @@ class SCAOpenAPIClient:
             if max_retries is not None
             else int(os.getenv("SCA_OPENAPI_MAX_RETRIES") or 2)
         )
+        self.verify = _resolve_ssl_verify(verify)
 
         if not self.base_url:
             raise ValueError("SCA OpenAPI base_url is required")
@@ -61,7 +116,11 @@ class SCAOpenAPIClient:
         if not self.secret_key:
             raise ValueError("SCA OpenAPI secret_key is required")
 
-        self._client = client or httpx.Client(base_url=self.base_url, timeout=self.timeout_seconds)
+        self._client = client or httpx.Client(
+            base_url=self.base_url,
+            timeout=self.timeout_seconds,
+            verify=self.verify,
+        )
         self._owns_client = client is None
 
     def close(self) -> None:
@@ -99,10 +158,11 @@ class SCAOpenAPIClient:
             yield response
 
             page_data = response.data if isinstance(response.data, dict) else {}
-            has_next = bool(page_data.get("has_next"))
-            if not has_next:
+            next_num = _next_page_number(page_data, page_params)
+            if next_num is None:
                 break
-            next_num = page_data.get("next_num") or int(page_params.get("page", 1)) + 1
+            if next_num == _int_or_none(page_params.get("page")):
+                break
             page_params["page"] = next_num
 
     def _request(

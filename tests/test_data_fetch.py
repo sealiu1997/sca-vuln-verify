@@ -4,7 +4,13 @@ from pathlib import Path
 import pytest
 
 from sca_vuln_verify.adapters.sca_openapi import OpenAPIResponse
-from sca_vuln_verify.exceptions import NormalizationError, OpenAPIServerError, PartialFetchError
+from sca_vuln_verify.exceptions import (
+    FetchError,
+    NormalizationError,
+    OpenAPIResponseError,
+    OpenAPIServerError,
+    PartialFetchError,
+)
 from sca_vuln_verify.modules.data_fetch import (
     discover_project_tasks,
     fetch_component_detail,
@@ -241,6 +247,23 @@ def test_fetch_component_versions_falls_back_to_knowledge_base():
     assert client.calls[0][2] == {"name": "log4j-core", "language": 1}
 
 
+def test_fetch_component_versions_skips_null_knowledge_base_versions(caplog):
+    client = FakeClient(
+        routes={
+            "/openapi/v1/knowledge-base/comps/versions": response(
+                {"comp_type": 1, "language": 1, "total": 1, "versions": [None]},
+                "req-null-versions",
+            ),
+        }
+    )
+    caplog.set_level("WARNING")
+
+    versions = fetch_component_versions(client, {"name": "log4j-core", "version": "2.14.1", "language_enum": 1})
+
+    assert versions == []
+    assert "valid_versions=0" in caplog.text
+
+
 def test_fetch_vuln_affected_components_reuses_vuln_normalization():
     client = FakeClient(
         routes={
@@ -350,3 +373,88 @@ def test_discover_project_tasks_resolves_project_name_before_modules():
 
     assert tasks[0]["project_id"] == 99
     assert client.calls[0] == ("iter_pages", "/openapi/v1/projects", {"name": "my-service", "num": 100})
+
+
+def test_discover_project_tasks_reports_task_names_without_stable_ids():
+    client = FakeClient(
+        pages={
+            "/openapi/v1/modules": [
+                response(
+                    {
+                        "page": 1,
+                        "per_page": 1,
+                        "total": 1,
+                        "items": [
+                            {
+                                "id": 10,
+                                "name": "backend",
+                                "project_id": 99,
+                                "project_name": "my-service",
+                                "task_names": ["main"],
+                            }
+                        ],
+                    },
+                    "req-modules",
+                ),
+            ],
+        },
+    )
+
+    with pytest.raises(FetchError) as exc_info:
+        discover_project_tasks(client, 99)
+
+    assert "pass task_ids" in str(exc_info.value)
+
+
+def test_discover_project_tasks_can_scan_explicit_task_id_range():
+    client = FakeClient(
+        routes={
+            "/openapi/v1/tasks/1": OpenAPIResponseError(
+                "record not found",
+                endpoint="GET /openapi/v1/tasks/1",
+                request_id="req-task-1",
+            ),
+            "/openapi/v1/tasks/2": response(
+                {"id": 2, "name": "other-project-task", "project_id": 100},
+                "req-task-2",
+            ),
+            "/openapi/v1/tasks/3": response(
+                {
+                    "id": 3,
+                    "name": "main",
+                    "project_id": 99,
+                    "project_name": "my-service",
+                    "module_id": 10,
+                    "module_name": "backend",
+                    "check_status_num": 3,
+                },
+                "req-task-3",
+            ),
+        },
+        pages={
+            "/openapi/v1/modules": [
+                response(
+                    {
+                        "page": 1,
+                        "per_page": 1,
+                        "total": 1,
+                        "items": [
+                            {
+                                "id": 10,
+                                "name": "backend",
+                                "project_id": 99,
+                                "project_name": "my-service",
+                                "task_names": ["main"],
+                            }
+                        ],
+                    },
+                    "req-modules",
+                ),
+            ],
+        },
+    )
+
+    tasks = discover_project_tasks(client, 99, task_scan_range=(1, 3))
+
+    assert [task["id"] for task in tasks] == [3]
+    assert tasks[0]["source_api"] == "GET /openapi/v1/tasks/3"
